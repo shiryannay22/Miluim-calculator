@@ -386,7 +386,8 @@ const {
   useState,
   useMemo,
   useEffect,
-  useRef
+  useRef,
+  useCallback
 } = React;
 
 /* ─── FONTS & GLOBAL STYLES ──────────────────────────────────────────────────── */
@@ -2136,7 +2137,6 @@ function BCard({
     color: C.white,
     stroke: 3
   })), claimStatus === "received" ? "קיבלתי ✓" : b.requiresApp ? "קיבלתי" : "קיבלתי / מומש")))));
-  return ReactDOM.createPortal(content, document.body);
 }
 
 /* ─── DAY-ONE STATE ──────────────────────────────────────────────────────────── */
@@ -2375,7 +2375,15 @@ function ShareSheet({
   };
   const printPage = () => {
     const rows = okBens.map(b => '<tr><td>' + b.title + '</td><td style="text-align:left;font-weight:700;color:#2E7D32">' + (b.money && b.amt > 0 ? '₪' + b.amt.toLocaleString() : b.badge || 'זכאי/ת') + '</td></tr>').join('');
-    const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>הטבות מילואים 2026</title><style>body{font-family:Arial,sans-serif;direction:rtl;padding:32px;color:#1A2230}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#555;font-weight:normal;margin-bottom:20px}table{width:100%;border-collapse:collapse}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}tr:last-child td{border:none}.total{margin-top:20px;padding:14px;background:#f0f7f0;border-radius:8px;font-size:16px;font-weight:bold}@media print{body{padding:16px}}</style></head><body><h1>מחשבון הטבות מילואים 2026</h1><h2>' + (name || '') + (tier ? ' · מדרג ' + tier.label + ' — ' + tier.name : '') + ' · ' + totalDays + ' ימי שירות</h2><table>' + rows + '</table><div class="total">סך תגמולים כספיים: ₪' + totalCash.toLocaleString() + '</div><p style="margin-top:20px;font-size:11px;color:#999">חושב בעזרת מחשבון הטבות מילואים 2026</p></body></html>';
+    const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>הטבות מילואים 2026</title><style>body{font-family:Arial,sans-serif;direction:rtl;padding:32px;color:#1A2230}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#555;font-weight:normal;margin-bottom:20px}table{width:100%;border-collapse:collapse}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}tr:last-child td{border:none}.total{margin-top:20px;padding:14px;background:#f0f7f0;border-radius:8px;font-size:16px;font-weight:bold}@media print{body{padding:16px}}</style></head><body><h1>מחשבון הטבות מילואים 2026</h1><h2>' + (name || '') + (tier ? ' · מדרג ' + tier.label + ' — ' + tier.name : '') + ' · ' + totalDays + ' ימי שירות</h2><table>' + rows + '</table><div class="total">סך תגמולים כספיים: ₪' + totalCash.toLocaleString() + '</div><p style="margin-top:20px;font-size:11px;color:#999">חושב בעזרת מחשבון הטבות מילואים 2026</p>
+    <script>
+    nagishli_config = {
+      language: "he",
+      color: "blue"
+    };
+    </script>
+    <script src="nagishli_beta.js?v=3.0b" charset="utf-8" defer></script>
+  </body></html>';
     const blob = new Blob([html], {
       type: 'text/html;charset=utf-8'
     });
@@ -2389,11 +2397,15 @@ function ShareSheet({
     URL.revokeObjectURL(url);
     onClose();
   };
-  const content = /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
-      zIndex: 9998
+      zIndex: 9998,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0
     }
   }, /*#__PURE__*/React.createElement("div", {
     onClick: onClose,
@@ -2545,7 +2557,7 @@ function App() {
   const [sheet, setSheet] = useState(null);
   const [extraPeriods, setExtra] = useState([]); // [{days:22},{days:15}]
   const [claimed, setClaimed] = useState({}); // {id: 'applied'|'received'}
-  const [shareOpen, setShare] = useState(false);
+
   const nav = s => {
     setNavDir(s > (step || 0) ? 1 : -1);
     setPageKey(k => k + 1);
@@ -2619,6 +2631,67 @@ function App() {
   const bens = useMemo(() => tier ? calc(tier, totalDays, married, kids, cmd, student, newBorn, special, reloc) : [], [tier, totalDays, married, kids, cmd, student, newBorn, special, reloc]);
   const okBens = bens.filter(b => b.ok);
   const unclaimedCash = okBens.filter(b => b.money && b.amt > 0 && claimed[b.id] !== 'received').reduce((s, b) => s + b.amt, 0);
+  const doShare = () => {
+    const parts = ["מחשבון הטבות מילואים 2026", name ? "שם: " + name : "", "מדרג: " + (tier && tier.label) + " - " + (tier && tier.name), "ימי שירות: " + totalDays, "סך תגמולים: " + totalCash.toLocaleString() + " שח", "", "הטבות זכאי/ת:"].concat(bens.filter(b => b.ok).map(b => "- " + b.title + (b.money && b.amt > 0 ? " : " + b.amt.toLocaleString() + " שח" : ""))).filter(Boolean);
+    const text = parts.join("\n");
+    const copyFallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;opacity:0;top:0;right:0;width:1px;height:1px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      var ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch (e) {}
+      document.body.removeChild(ta);
+      if (ok) {
+        try {
+          alert("הסיכום הועתק ✓\nאפשר להדביק בוואטסאפ או מייל");
+        } catch (e) {}
+      } else {
+        try {
+          window.prompt("העתק/י את הסיכום:", text);
+        } catch (e) {}
+      }
+    };
+    if (navigator.share) {
+      navigator.share({
+        title: "הטבות מילואים שלי",
+        text: text
+      }).catch(function () {
+        copyFallback();
+      });
+    } else {
+      copyFallback();
+    }
+  };
+  const doDownload = () => {
+    const rows = bens.filter(b => b.ok).map(b => '<tr><td>' + b.title + '</td><td style="text-align:left;font-weight:bold;color:#2E7D32">' + (b.money && b.amt > 0 ? b.amt.toLocaleString() + " שח" : b.badge || "זכאי/ת") + '</td></tr>').join("");
+    const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>הטבות מילואים 2026</title><style>body{font-family:Arial;direction:rtl;padding:32px;color:#1A2230}h1{font-size:22px}h2{font-size:14px;color:#555;font-weight:normal;margin:4px 0 24px}table{width:100%;border-collapse:collapse}td{padding:10px;border-bottom:1px solid #eee;font-size:14px}.total{margin-top:20px;padding:14px;background:#f0f7f0;border-radius:8px;font-size:16px;font-weight:bold}</style></head><body><h1>הטבות מילואים 2026</h1><h2>' + (name || "") + (tier ? " - מדרג " + tier.label + " - " + tier.name : "") + " - " + totalDays + " ימי שירות</h2><table>" + rows + '</table><div class="total">סך תגמולים: ' + totalCash.toLocaleString() + ' שח</div>
+    <script>
+    nagishli_config = {
+      language: "he",
+      color: "blue"
+    };
+    </script>
+    <script src="nagishli_beta.js?v=3.0b" charset="utf-8" defer></script>
+  </body></html>';
+    const blob = new Blob([html], {
+      type: "text/html;charset=utf-8"
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "הטבות-מילואים-2026.html";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 200);
+  };
   const appliedCount = okBens.filter(b => claimed[b.id] === 'applied').length;
   const receivedCount = okBens.filter(b => claimed[b.id] === 'received').length;
   const notOkBens = bens.filter(b => !b.ok);
@@ -2661,6 +2734,10 @@ function App() {
   if (step === 0) return /*#__PURE__*/React.createElement("div", {
     key: pageKey,
     className: pageKey > 0 ? pgClass : "",
+    onAnimationEnd: e => {
+      e.currentTarget.style.transform = "none";
+      e.currentTarget.style.animation = "none";
+    },
     style: {
       minHeight: "100vh",
       background: C.bg,
@@ -2832,6 +2909,10 @@ function App() {
   if (step === 1) return /*#__PURE__*/React.createElement("div", {
     key: pageKey,
     className: pgClass,
+    onAnimationEnd: e => {
+      e.currentTarget.style.transform = "none";
+      e.currentTarget.style.animation = "none";
+    },
     style: {
       minHeight: "100vh",
       background: C.bg,
@@ -3512,6 +3593,10 @@ function App() {
   return /*#__PURE__*/React.createElement("div", {
     key: pageKey,
     className: pgClass,
+    onAnimationEnd: e => {
+      e.currentTarget.style.transform = "none";
+      e.currentTarget.style.animation = "none";
+    },
     style: {
       minHeight: "100vh",
       background: C.bg,
@@ -3563,11 +3648,11 @@ function App() {
       color: C.navy
     }
   }, "\u05DE\u05D3\u05E8\u05D2 ", tier && tier.label), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShare(true),
+    onClick: doShare,
     className: "press",
     style: {
-      width: 35,
-      height: 35,
+      width: 36,
+      height: 36,
       borderRadius: "50%",
       background: C.greenBg,
       border: "none",
@@ -3994,15 +4079,7 @@ function App() {
         fontWeight: 600
       }
     }, "\u20AA", c.grant.toLocaleString()));
-  }))), /*#__PURE__*/React.createElement(ShareSheet, {
-    open: shareOpen,
-    onClose: () => setShare(false),
-    name: name,
-    tier: tier,
-    totalDays: totalDays,
-    totalCash: totalCash,
-    okBens: okBens
-  }));
+  }))));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 </script>
@@ -4013,5 +4090,13 @@ window.addEventListener('appinstalled',function(){var b=document.getElementById(
 window.installApp=async function(){if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;var b=document.getElementById('install-banner');if(b)b.style.transform='translateY(100%)';};
 if('serviceWorker' in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){});});
 </script>
-</body>
+
+    <script>
+    nagishli_config = {
+      language: "he",
+      color: "blue"
+    };
+    </script>
+    <script src="nagishli_beta.js?v=3.0b" charset="utf-8" defer></script>
+  </body>
 </html>
